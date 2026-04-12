@@ -19,14 +19,14 @@ def main():
             print("✅ Successfully decrypted and extracted files.")
 
         # ২. মূল স্ক্রিপ্টটি রান করা
-        # আপনার স্ক্রিপ্টের নাম যদি auto_generator.py হয়
-        script_path = os.path.join(extract_folder, "auto_generator.py")
+        # আপনার স্ক্রিপ্টের নাম যদি update_redforce.py হয়
+        script_path = os.path.join(extract_folder, "update_redforce.py")
         
         if os.path.exists(script_path):
             print(f"🚀 Running {script_path}...")
             os.system(f"python {script_path}")
         else:
-            print("❌ Error: auto_generator.py not found inside the zip!")
+            print("❌ Error: update_redforce.py not found inside the zip!")
 
     except Exception as e:
         print(f"❌ An error occurred: {e}")
