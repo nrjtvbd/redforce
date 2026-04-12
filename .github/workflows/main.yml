@@ -1,0 +1,35 @@
+name: Update REDFORCE Token
+
+on:
+  schedule:
+    - cron: '*/20 * * * *' # প্রতি ২০ মিনিট পর পর চালানোই ভালো, এতে লিমিট শেষ হবে না
+  workflow_dispatch: 
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Decrypt and Run Scraper
+        env:
+          ZIP_PASS: ${{ secrets.ZIP_PASS }} # গিটহাব সিক্রেট থেকে পাসওয়ার্ড নেবে
+        run: |
+          python decrypt.py
+
+      - name: Commit and Push
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add playlist.m3u8
+          git commit -m "Updated Token via Secure Script" || exit 0
+          git push
