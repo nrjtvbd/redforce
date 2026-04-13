@@ -2,7 +2,7 @@ name: Update REDFORCE Token
 
 on:
   schedule:
-    - cron: '*/20 * * * *' # প্রতি ২০ মিনিট পর পর চালানোই ভালো, এতে লিমিট শেষ হবে না
+    - cron: '*/20 * * * *' 
   workflow_dispatch: 
 
 jobs:
@@ -18,18 +18,22 @@ jobs:
           python-version: '3.x'
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install requests p7zip-full
 
-      - name: Decrypt and Run Scraper
+      - name: Unzip and Run Scraper
         env:
-          ZIP_PASS: ${{ secrets.ZIP_PASS }} # গিটহাব সিক্রেট থেকে পাসওয়ার্ড নেবে
+          ZIP_PASS: ${{ secrets.ZIP_PASS }}
         run: |
-          python decrypt.py
+          # 7z ব্যবহার করে পাসওয়ার্ড দিয়ে আনজিপ করা
+          7z x redforce_main.zip -p"$ZIP_PASS" -o. -y
+          # আনজিপ হওয়ার পর ফাইলটি রান করা
+          python update_redforce.py
 
       - name: Commit and Push
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          git pull origin main --rebase
           git add playlist.m3u8
-          git commit -m "Updated Token via Secure Script" || exit 0
-          git push
+          git commit -m "Auto Update Playlist" || exit 0
+          git push origin main
