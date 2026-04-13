@@ -8,20 +8,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - name: Fetch Token
+      - name: Decrypt and Run Scraper
+        env:
+          ZIP_PASS: ${{ secrets.ZIP_PASS }}
         run: |
-          TOKEN=$(curl -s -H "User-Agent: Mozilla/5.0" "http://redforce.live/" | grep -oP 'token=\K[a-zA-Z0-9\-_.]+' | head -1)
-          if [ ! -z "$TOKEN" ]; then
-            echo "$TOKEN" > token.txt
-            echo "Token found: $TOKEN"
-          else
-            echo "Failed to fetch token"
-            exit 1
-          fi
-      - name: Commit Change
+          python decrypt.py
+
+      - name: Commit and Push Token
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add token.txt
-          git commit -m "Update Token" || exit 0
+          git commit -m "Update Redforce Token" || exit 0
           git push
