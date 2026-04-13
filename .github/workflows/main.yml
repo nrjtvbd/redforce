@@ -1,36 +1,27 @@
-name: Update REDFORCE Token
-
+name: Update Redforce Token
 on:
   schedule:
     - cron: '*/30 * * * *'
-  workflow_dispatch: 
-
+  workflow_dispatch:
 jobs:
-  build:
+  update-token:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.x'
-
-      - name: Install dependencies
-        run: pip install requests
-
-      - name: Decrypt and Run Scraper
-        env:
-          ZIP_PASS: ${{ secrets.ZIP_PASS }}
+      - uses: actions/checkout@v3
+      - name: Fetch Token
         run: |
-          python decrypt.py
-
-      - name: Commit and Push
+          TOKEN=$(curl -s -H "User-Agent: Mozilla/5.0" "http://redforce.live/" | grep -oP 'token=\K[a-zA-Z0-9\-_.]+' | head -1)
+          if [ ! -z "$TOKEN" ]; then
+            echo "$TOKEN" > token.txt
+            echo "Token found: $TOKEN"
+          else
+            echo "Failed to fetch token"
+            exit 1
+          fi
+      - name: Commit Change
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git pull origin main --rebase
-          git add playlist.m3u8
-          git commit -m "Auto Update Playlist" || exit 0
-          git push origin main
+          git add token.txt
+          git commit -m "Update Token" || exit 0
+          git push
