@@ -1,9 +1,15 @@
 import re
-import time
 import datetime
 import requests
+import time
 
 # --- Configuration ---
+# সরাসরি কানেকশন ফেইল করলে আমরা এই প্রক্সিগুলো ব্যবহার করব
+PROXIES = [
+    "https://api.allorigins.win/get?url=", # CORS Proxy
+    "https://api.codetabs.com/v1/proxy?quest=" # Alternative Proxy
+]
+
 BASE_URL = "http://redforce.live:8082"
 PLAYER_URL = "http://redforce.live/player.php?stream="
 PLAYLIST_FILENAME = "playlist.m3u"
@@ -19,49 +25,54 @@ CHANNELS = [
 ]
 
 def get_token(ch_id):
-    headers = {
-        "Referer": "http://redforce.live/",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    }
-    try:
-        # সরাসরি প্লেয়ার পেজ থেকে ডাটা আনা
-        response = requests.get(f"{PLAYER_URL}{ch_id}", headers=headers, timeout=15)
-        if response.status_code == 200:
-            # সোর্স কোড থেকে টোকেন খুঁজে বের করা
-            match = re.search(r'token=([a-zA-Z0-9\-_.]+)', response.text)
-            if match:
-                return match.group(1)
-    except Exception as e:
-        print(f"Connection Error for ID {ch_id}: {e}")
+    target_url = f"{PLAYER_URL}{ch_id}"
+    
+    # প্রথমে প্রক্সি দিয়ে চেষ্টা করা (গিটহাব আইপি হাইড করার জন্য)
+    for proxy in PROXIES:
+        try:
+            print(f"📡 Trying via Proxy for ID {ch_id}...")
+            # Allorigins এর জন্য বিশেষ ফরম্যাট
+            if "allorigins" in proxy:
+                response = requests.get(f"{proxy}{target_url}", timeout=20)
+                html = response.json().get('contents', '')
+            else:
+                response = requests.get(f"{proxy}{target_url}", timeout=20)
+                html = response.text
+
+            token_match = re.search(r'token=([a-zA-Z0-9\-_.]+)', html)
+            if token_match:
+                return token_match.group(1)
+        except:
+            continue
     return None
 
 def main():
-    print(f"🚀 Starting RedForce Fetcher (Requests Mode)...")
+    print(f"🚀 Starting RedForce Bypass Fetcher...")
     playlist_entries = []
     
     for ch in CHANNELS:
-        print(f"📡 Fetching: {ch['name']}...")
+        print(f"🔍 Processing: {ch['name']}...")
         token = get_token(ch['id'])
         
         if token:
-            # আপনার ইনস্পেক্ট করা URL ফরম্যাট অনুযায়ী
             stream_url = f"{BASE_URL}/{ch['name']}/index.m3u8?token={token}&remote=no_check_ip"
             playlist_entries.append(f'#EXTINF:-1 tvg-name="{ch["name"]}" group-title="{ch["group"]}",{ch["name"]}\n{stream_url}')
-            print(f"✅ Success!")
+            print(f"✅ Token Found!")
         else:
-            print(f"❌ Token Failed.")
-        time.sleep(1) # সার্ভারে চাপ কমাতে সামান্য বিরতি
+            print(f"❌ Failed.")
+        time.sleep(2)
 
+    # ফাইল সেভ করা
     updated_at = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
     header = f"#EXTM3U\n# Last Updated: {updated_at}\n"
-
+    
     with open(PLAYLIST_FILENAME, "w") as f:
         if playlist_entries:
             f.write(header + "\n".join(playlist_entries))
-            print(f"🎉 Playlist updated with {len(playlist_entries)} channels.")
+            print(f"🎉 Success! {len(playlist_entries)} channels updated.")
         else:
-            f.write(header + "# No tokens found.")
-            print("🛑 No channels were fetched.")
+            f.write(header + "# Fetching failed due to IP blocking.")
+            print("🛑 No channels fetched.")
 
 if __name__ == "__main__":
     main()
