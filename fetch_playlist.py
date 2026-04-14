@@ -1,83 +1,67 @@
 import re
 import time
 import datetime
-import concurrent.futures
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
+import requests
 
 # --- Configuration ---
-BASE_URL = "http://redforce.live:8082/"
-PLAYER_BASE = "http://redforce.live/player.php?stream="
+BASE_URL = "http://redforce.live:8082"
+PLAYER_URL = "http://redforce.live/player.php?stream="
 PLAYLIST_FILENAME = "playlist.m3u"
-MAX_WORKERS = 3
 
 CHANNELS = [
-    {"id": "1", "name": "T SPORTS", "group": "Sports"},
-    {"id": "80", "name": "ATN BANGLA HD", "group": "Bangla"},
-    {"id": "88", "name": "A SPORTS HD", "group": "Sports"},
-    {"id": "95", "name": "ATN NEWS", "group": "Bangla"},
-    {"id": "7", "name": "ZEE TV HD", "group": "Hindi"},
+    {"id": "1", "name": "T.SPORTS", "group": "Sports"},
+    {"id": "80", "name": "ATN.BANGLA.HD", "group": "Bangla"},
+    {"id": "88", "name": "A.SPORTS.HD", "group": "Sports"},
+    {"id": "95", "name": "ATN.NEWS", "group": "Bangla"},
+    {"id": "7", "name": "ZEE.TV.HD", "group": "Hindi"},
     {"id": "53", "name": "ZING", "group": "Hindi"},
     {"id": "42", "name": "ZOOM", "group": "Hindi"}
 ]
 
-def get_stream(channel):
-    driver = None
+def get_token(ch_id):
+    headers = {
+        "Referer": "http://redforce.live/",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    }
     try:
-        options = Options()
-        options.add_argument("--headless")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        
-        # GitHub Actions এ ড্রাইভার সেটআপ
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
-        
-        driver.get(f"{PLAYER_BASE}{channel['id']}")
-        time.sleep(8) # পেজ লোড হওয়ার জন্য সময়
-        
-        page_source = driver.page_source
-        # টোকেন খোঁজার রিজেক্স (Regex)
-        match = re.search(r'token=([a-zA-Z0-9\-_.]+)', page_source)
-        
-        if match:
-            token = match.group(1)
-            # রেডফোর্স এর m3u8 ফরম্যাট
-            url = f"{BASE_URL}{channel['name'].replace(' ', '.')}/index.m3u8?token={token}&remote=no_check_ip"
-            print(f"✅ Extracted: {channel['name']}")
-            return f'#EXTINF:-1 tvg-name="{channel["name"]}" group-title="{channel["group"]}",{channel["name"]}\n{url}'
-        
-        print(f"⚠️ No token for: {channel['name']}")
-        return None
+        # সরাসরি প্লেয়ার পেজ থেকে ডাটা আনা
+        response = requests.get(f"{PLAYER_URL}{ch_id}", headers=headers, timeout=15)
+        if response.status_code == 200:
+            # সোর্স কোড থেকে টোকেন খুঁজে বের করা
+            match = re.search(r'token=([a-zA-Z0-9\-_.]+)', response.text)
+            if match:
+                return match.group(1)
     except Exception as e:
-        print(f"❌ Error on {channel['name']}: {e}")
-        return None
-    finally:
-        if driver: driver.quit()
+        print(f"Connection Error for ID {ch_id}: {e}")
+    return None
 
 def main():
-    print(f"🚀 Starting RedForce Fetcher for {len(CHANNELS)} channels...")
+    print(f"🚀 Starting RedForce Fetcher (Requests Mode)...")
+    playlist_entries = []
     
-    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        results = list(executor.map(get_stream, CHANNELS))
-    
-    playlist_entries = [r for r in results if r]
-    
-    # এরর এড়াতে সবসময় একটি ফাইল তৈরি করা নিশ্চিত করা হচ্ছে
+    for ch in CHANNELS:
+        print(f"📡 Fetching: {ch['name']}...")
+        token = get_token(ch['id'])
+        
+        if token:
+            # আপনার ইনস্পেক্ট করা URL ফরম্যাট অনুযায়ী
+            stream_url = f"{BASE_URL}/{ch['name']}/index.m3u8?token={token}&remote=no_check_ip"
+            playlist_entries.append(f'#EXTINF:-1 tvg-name="{ch["name"]}" group-title="{ch["group"]}",{ch["name"]}\n{stream_url}')
+            print(f"✅ Success!")
+        else:
+            print(f"❌ Token Failed.")
+        time.sleep(1) # সার্ভারে চাপ কমাতে সামান্য বিরতি
+
     updated_at = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
     header = f"#EXTM3U\n# Last Updated: {updated_at}\n"
-    
-    if playlist_entries:
-        final_content = header + "\n".join(playlist_entries)
-        with open(PLAYLIST_FILENAME, "w") as f:
-            f.write(final_content)
-        print(f"🎉 Success! {len(playlist_entries)} channels saved to {PLAYLIST_FILENAME}.")
-    else:
-        # কোনো চ্যানেল না পেলেও ফাইল তৈরি হবে যাতে Git Action ফেইল না করে
-        with open(PLAYLIST_FILENAME, "w") as f:
-            f.write(header + "# No channels were fetched successfully.")
-        print("🛑 No tokens found, but placeholder file created.")
+
+    with open(PLAYLIST_FILENAME, "w") as f:
+        if playlist_entries:
+            f.write(header + "\n".join(playlist_entries))
+            print(f"🎉 Playlist updated with {len(playlist_entries)} channels.")
+        else:
+            f.write(header + "# No tokens found.")
+            print("🛑 No channels were fetched.")
 
 if __name__ == "__main__":
     main()
